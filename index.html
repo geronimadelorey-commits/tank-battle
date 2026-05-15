@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>坦克大战 - Tank Battle</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="game-container">
+        <div class="header">
+            <h1>坦克大战</h1>
+            <div class="stats">
+                <span>得分: <span id="score">0</span></span>
+                <span>生命: <span id="lives">3</span></span>
+                <span>关卡: <span id="level">1</span></span>
+                <span>敌人: <span id="enemies">0</span></span>
+            </div>
+        </div>
+        <canvas id="gameCanvas" width="780" height="580"></canvas>
+        <div class="controls">
+            <div class="control-group">
+                <span class="key">WASD / 方向键</span> 移动
+            </div>
+            <div class="control-group">
+                <span class="key">空格</span> 射击
+            </div>
+            <div class="control-group">
+                <span class="key">P</span> 暂停
+            </div>
+            <div class="control-group">
+                <span class="key">R</span> 重新开始
+            </div>
+        </div>
+    </div>
+
+    <div id="gameOverModal" class="modal hidden">
+        <div class="modal-content">
+            <h2 id="gameOverTitle">游戏结束</h2>
+            <p id="gameOverScore">最终得分: 0</p>
+            <button id="restartBtn">重新开始</button>
+        </div>
+    </div>
+
+    <div id="startModal" class="modal">
+        <div class="modal-content">
+            <h2>坦克大战</h2>
+            <p>保护基地，消灭所有敌人！</p>
+            <button id="startBtn">开始游戏</button>
+        </div>
+    </div>
+
+    <script src="js/game.js"></script>
+</body>
+</html>

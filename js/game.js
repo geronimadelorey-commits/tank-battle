@@ -1,0 +1,721 @@
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+const TILE_SIZE = 20;
+const COLS = 39;
+const ROWS = 29;
+const FPS = 60;
+
+let game = {
+    state: 'start',
+    score: 0,
+    lives: 3,
+    level: 1,
+    paused: false,
+    frame: 0
+};
+
+const DIR = { UP: 0, RIGHT: 1, DOWN: 2, LEFT: 3 };
+const DX = [0, 1, 0, -1];
+const DY = [-1, 0, 1, 0];
+
+function dirToAngle(dir) {
+    return dir * 90 * Math.PI / 180;
+}
+
+function clamp(v, min, max) {
+    return Math.max(min, Math.min(max, v));
+}
+
+function rectsOverlap(a, b, margin) {
+    margin = margin || 0;
+    return a.x + margin < b.x + b.w - margin &&
+           a.x + a.w - margin > b.x + margin &&
+           a.y + margin < b.y + b.h - margin &&
+           a.y + a.h - margin > b.y + margin;
+}
+
+function randInt(min, max) {
+    return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+let map = [];
+let walls = [];
+let player = null;
+let enemies = [];
+let bullets = [];
+let particles = [];
+let base = null;
+let enemySpawnQueue = 0;
+let enemySpawnTimer = 0;
+
+const LEVEL_MAPS = [
+    [
+        "222222222222222222222222222222222222222",
+        "200000000000000000000000000000000000002",
+        "202222202222222000000002222222022222202",
+        "202000000000002000000002000000000000202",
+        "202000000000002000000002000000000000202",
+        "200000000000000000000000000000000000002",
+        "202222200022222000000022222000022222202",
+        "200000000000000000000000000000000000002",
+        "200000000000000000000000000000000000002",
+        "202222202222222000000002222222022222202",
+        "200000000000002000000002000000000000002",
+        "200000000000002000000002000000000000002",
+        "200000000000000000000000000000000000002",
+        "200000000000000000000000000000000000002",
+        "202222200022222222422222222000022222202",
+        "200000000000000020002000000000000000002",
+        "200000000000000020002000000000000000002",
+        "200000000000000000000000000000000000002",
+        "202222202222222000000002222222022222202",
+        "200000000000002000000002000000000000002",
+        "200000000000002000000002000000000000002",
+        "202222200022222000000022222000022222202",
+        "200000000000000000000000000000000000002",
+        "200000000000000000000000000000000000002",
+        "202222202222222000000002222222022222202",
+        "200000000000002000000002000000000000002",
+        "200000000000002000000002000000000000002",
+        "200000000000000000000000000000000000002",
+        "222222222222222222222222222222222222222"
+    ],
+    [
+        "222222222222222222222222222222222222222",
+        "200000000000000000000000000000000000002",
+        "202220222022220000000002222022202222202",
+        "202220222022220000000002222022202222202",
+        "200000000000000000000000000000000000002",
+        "200000000000000000000000000000000000002",
+        "202220222022220222222202222022202222202",
+        "202220222022220200000202222022202222202",
+        "200000000000000200000200000000000000002",
+        "200000000000000200000200000000000000002",
+        "202220222022220222222202222022202222202",
+        "202220222022220000000002222022202222202",
+        "200000000000000000000000000000000000002",
+        "200000000000000000000000000000000000002",
+        "202220222022220222422202222022202222202",
+        "202220222022220220002202222022202222202",
+        "200000000000000220002200000000000000002",
+        "200000000000000220002200000000000000002",
+        "202220222022220222222202222022202222202",
+        "202220222022220000000002222022202222202",
+        "200000000000000000000000000000000000002",
+        "200000000000000000000000000000000000002",
+        "202220222022220222222202222022202222202",
+        "202220222022220200000202222022202222202",
+        "200000000000000200000200000000000000002",
+        "200000000000000200000200000000000000002",
+        "202220222022220222222202222022202222202",
+        "200000000000000000000000000000000000002",
+        "222222222222222222222222222222222222222"
+    ],
+    [
+        "222222222222222222222222222222222222222",
+        "200000000000000000000000000000000000002",
+        "200000000000000000000000000000000000002",
+        "202222222222222200000222222222222222202",
+        "200000000000000200000200000000000000002",
+        "200000000000000200000200000000000000002",
+        "200000000000000222222200000000000000002",
+        "200000000000000000000000000000000000002",
+        "200000000000000000000000000000000000002",
+        "202222222222222200000222222222222222202",
+        "200000000000000200000200000000000000002",
+        "200000000000000200000200000000000000002",
+        "200000000000000222222200000000000000002",
+        "200000000000000000000000000000000000002",
+        "200000000000000000400000000000000000002",
+        "200000000000000000000000000000000000002",
+        "200000000000000222222200000000000000002",
+        "200000000000000200000200000000000000002",
+        "200000000000000200000200000000000000002",
+        "202222222222222200000222222222222222202",
+        "200000000000000000000000000000000000002",
+        "200000000000000000000000000000000000002",
+        "200000000000000222222200000000000000002",
+        "200000000000000200000200000000000000002",
+        "200000000000000200000200000000000000002",
+        "202222222222222200000222222222222222202",
+        "200000000000000000000000000000000000002",
+        "200000000000000000000000000000000000002",
+        "222222222222222222222222222222222222222"
+    ]
+];
+
+function loadLevel(lvl) {
+    const idx = (lvl - 1) % LEVEL_MAPS.length;
+    const rows = LEVEL_MAPS[idx];
+    walls = [];
+    let baseTile = null;
+
+    for (let r = 0; r < ROWS; r++) {
+        map[r] = [];
+        for (let c = 0; c < COLS; c++) {
+            const ch = rows[r][c];
+            let tile = 0;
+            if (ch === '2') {
+                tile = 2;
+                walls.push({ x: c * TILE_SIZE, y: r * TILE_SIZE, type: 2, w: TILE_SIZE, h: TILE_SIZE });
+            } else if (ch === '1') {
+                tile = 1;
+                walls.push({ x: c * TILE_SIZE, y: r * TILE_SIZE, type: 1, w: TILE_SIZE, h: TILE_SIZE });
+            } else if (ch === '4') {
+                tile = 4;
+                baseTile = { x: c * TILE_SIZE, y: r * TILE_SIZE };
+            }
+            map[r][c] = tile;
+        }
+    }
+
+    if (baseTile) {
+        base = {
+            x: baseTile.x,
+            y: baseTile.y,
+            w: TILE_SIZE,
+            h: TILE_SIZE,
+            alive: true
+        };
+    }
+}
+
+function createPlayer() {
+    return {
+        x: 2 * TILE_SIZE,
+        y: 2 * TILE_SIZE,
+        w: TILE_SIZE * 1.6,
+        h: TILE_SIZE * 1.6,
+        dir: DIR.DOWN,
+        speed: 2.5,
+        alive: true,
+        cooldown: 0,
+        invincible: 120,
+        color: '#4CAF50'
+    };
+}
+
+function createEnemy() {
+    const spawnX = [COLS - 4, COLS - 4, 2];
+    const spawnY = [2, ROWS - 4, ROWS - 4];
+    const idx = randInt(0, 2);
+    const isFast = Math.random() < 0.3;
+    const isStrong = Math.random() < 0.2;
+    return {
+        x: spawnX[idx] * TILE_SIZE,
+        y: spawnY[idx] * TILE_SIZE,
+        w: TILE_SIZE * 1.6,
+        h: TILE_SIZE * 1.6,
+        dir: randInt(0, 3),
+        speed: isFast ? 2 : 1.5,
+        alive: true,
+        cooldown: randInt(30, 90),
+        aiTimer: randInt(30, 90),
+        color: isStrong ? '#ff5722' : '#e94560',
+        hp: isStrong ? 2 : 1,
+        maxHp: isStrong ? 2 : 1,
+        score: isStrong ? 300 : (isFast ? 200 : 100)
+    };
+}
+
+function spawnEnemy() {
+    if (enemySpawnQueue <= 0) return;
+    if (enemySpawnTimer > 0) {
+        enemySpawnTimer--;
+        return;
+    }
+
+    const enemy = createEnemy();
+    let collides = false;
+    for (const e of enemies) {
+        if (rectsOverlap(enemy, e, -2)) { collides = true; break; }
+    }
+    if (player && rectsOverlap(enemy, player, -2)) collides = true;
+
+    if (!collides) {
+        enemies.push(enemy);
+        enemySpawnQueue--;
+        enemySpawnTimer = 90;
+    }
+}
+
+function fireBullet(owner, isPlayer) {
+    const cx = owner.x + owner.w / 2;
+    const cy = owner.y + owner.h / 2;
+    const speed = isPlayer ? 6 : 4;
+    const bx = cx + DX[owner.dir] * (owner.w / 2 + 4) - 3;
+    const by = cy + DY[owner.dir] * (owner.h / 2 + 4) - 3;
+
+    bullets.push({
+        x: bx,
+        y: by,
+        w: 6,
+        h: 6,
+        dir: owner.dir,
+        speed: speed,
+        isPlayer: isPlayer,
+        alive: true
+    });
+}
+
+function createParticles(x, y, color, count) {
+    for (let i = 0; i < count; i++) {
+        particles.push({
+            x: x,
+            y: y,
+            vx: (Math.random() - 0.5) * 6,
+            vy: (Math.random() - 0.5) * 6,
+            life: randInt(15, 35),
+            maxLife: 35,
+            color: color,
+            size: randInt(2, 5)
+        });
+    }
+}
+
+function canMove(entity, newX, newY) {
+    const margin = 2;
+    const rect = { x: newX + margin, y: newY + margin, w: entity.w - margin * 2, h: entity.h - margin * 2 };
+
+    if (rect.x < 0 || rect.x + rect.w > canvas.width ||
+        rect.y < 0 || rect.y + rect.h > canvas.height) return false;
+
+    for (const wall of walls) {
+        if (rectsOverlap(rect, wall, 0)) return false;
+    }
+
+    if (entity !== player && player && player.alive && rectsOverlap(rect, player, 0)) return false;
+
+    if (base && base.alive && rectsOverlap(rect, base, 0)) return false;
+
+    return true;
+}
+
+function updatePlayer() {
+    if (!player || !player.alive) return;
+
+    if (player.invincible > 0) player.invincible--;
+    if (player.cooldown > 0) player.cooldown--;
+
+    let moved = false;
+    let nx = player.x;
+    let ny = player.y;
+
+    if (keys['ArrowUp'] || keys['KeyW']) {
+        player.dir = DIR.UP;
+        ny -= player.speed;
+        moved = true;
+    } else if (keys['ArrowDown'] || keys['KeyS']) {
+        player.dir = DIR.DOWN;
+        ny += player.speed;
+        moved = true;
+    } else if (keys['ArrowLeft'] || keys['KeyA']) {
+        player.dir = DIR.LEFT;
+        nx -= player.speed;
+        moved = true;
+    } else if (keys['ArrowRight'] || keys['KeyD']) {
+        player.dir = DIR.RIGHT;
+        nx += player.speed;
+        moved = true;
+    }
+
+    if (moved) {
+        if (canMove(player, nx, player.y)) player.x = nx;
+        if (canMove(player, player.x, ny)) player.y = ny;
+    }
+
+    if (keys['Space'] && player.cooldown <= 0) {
+        fireBullet(player, true);
+        player.cooldown = 15;
+    }
+}
+
+function updateEnemies() {
+    for (const enemy of enemies) {
+        if (!enemy.alive) continue;
+
+        enemy.aiTimer--;
+        if (enemy.aiTimer <= 0) {
+            enemy.aiTimer = randInt(30, 90);
+            if (player && player.alive && Math.random() < 0.6) {
+                const dx = player.x - enemy.x;
+                const dy = player.y - enemy.y;
+                if (Math.abs(dx) > Math.abs(dy)) {
+                    enemy.dir = dx > 0 ? DIR.RIGHT : DIR.LEFT;
+                } else {
+                    enemy.dir = dy > 0 ? DIR.DOWN : DIR.UP;
+                }
+            } else {
+                enemy.dir = randInt(0, 3);
+            }
+        }
+
+        let nx = enemy.x + DX[enemy.dir] * enemy.speed;
+        let ny = enemy.y + DY[enemy.dir] * enemy.speed;
+
+        if (canMove(enemy, nx, ny)) {
+            enemy.x = nx;
+            enemy.y = ny;
+        } else {
+            enemy.dir = randInt(0, 3);
+            enemy.aiTimer = randInt(15, 30);
+        }
+
+        if (enemy.cooldown > 0) {
+            enemy.cooldown--;
+        } else {
+            if (player && player.alive) {
+                const dx = Math.abs(player.x - enemy.x);
+                const dy = Math.abs(player.y - enemy.y);
+                if ((dx < 30 || dy < 30) && Math.random() < 0.03) {
+                    fireBullet(enemy, false);
+                    enemy.cooldown = randInt(60, 120);
+                }
+            }
+        }
+    }
+}
+
+function updateBullets() {
+    for (const b of bullets) {
+        if (!b.alive) continue;
+        b.x += DX[b.dir] * b.speed;
+        b.y += DY[b.dir] * b.speed;
+
+        if (b.x < 0 || b.x > canvas.width || b.y < 0 || b.y > canvas.height) {
+            b.alive = false;
+            continue;
+        }
+
+        for (let i = walls.length - 1; i >= 0; i--) {
+            const wall = walls[i];
+            if (rectsOverlap(b, wall, 0)) {
+                if (wall.type === 1) {
+                    walls.splice(i, 1);
+                    createParticles(wall.x + wall.w / 2, wall.y + wall.h / 2, '#8B4513', 6);
+                } else {
+                    createParticles(b.x, b.y, '#999', 4);
+                }
+                b.alive = false;
+                break;
+            }
+        }
+        if (!b.alive) continue;
+
+        if (b.isPlayer) {
+            for (const enemy of enemies) {
+                if (enemy.alive && rectsOverlap(b, enemy, 0)) {
+                    enemy.hp--;
+                    b.alive = false;
+                    createParticles(b.x, b.y, enemy.color, 5);
+                    if (enemy.hp <= 0) {
+                        enemy.alive = false;
+                        game.score += enemy.score;
+                        createParticles(enemy.x + enemy.w / 2, enemy.y + enemy.h / 2, enemy.color, 15);
+                    }
+                    break;
+                }
+            }
+        } else {
+            if (player && player.alive && player.invincible <= 0 && rectsOverlap(b, player, 0)) {
+                b.alive = false;
+                playerHit();
+                break;
+            }
+        }
+
+        if (!b.alive) continue;
+
+        if (base && base.alive && rectsOverlap(b, base, 0)) {
+            b.alive = false;
+            base.alive = false;
+            createParticles(base.x + base.w / 2, base.y + base.h / 2, '#FFD700', 20);
+            gameOver(false);
+        }
+    }
+
+    bullets = bullets.filter(b => b.alive);
+}
+
+function playerHit() {
+    if (!player) return;
+    createParticles(player.x + player.w / 2, player.y + player.h / 2, player.color, 15);
+    game.lives--;
+    if (game.lives <= 0) {
+        player.alive = false;
+        gameOver(false);
+    } else {
+        player.x = 2 * TILE_SIZE;
+        player.y = 2 * TILE_SIZE;
+        player.dir = DIR.DOWN;
+        player.invincible = 180;
+        player.cooldown = 30;
+    }
+}
+
+function checkEnemyCollision() {
+    if (!player || !player.alive || player.invincible > 0) return;
+    for (const enemy of enemies) {
+        if (enemy.alive && rectsOverlap(player, enemy, -2)) {
+            playerHit();
+            break;
+        }
+    }
+}
+
+function updateParticles() {
+    for (const p of particles) {
+        p.x += p.vx;
+        p.y += p.vy;
+        p.life--;
+        p.vx *= 0.95;
+        p.vy *= 0.95;
+    }
+    particles = particles.filter(p => p.life > 0);
+}
+
+function updateUI() {
+    document.getElementById('score').textContent = game.score;
+    document.getElementById('lives').textContent = game.lives;
+    document.getElementById('level').textContent = game.level;
+    document.getElementById('enemies').textContent = enemies.filter(e => e.alive).length + enemySpawnQueue;
+}
+
+function checkLevelComplete() {
+    if (enemySpawnQueue <= 0 && enemies.filter(e => e.alive).length === 0) {
+        game.level++;
+        startLevel();
+    }
+}
+
+function startLevel() {
+    loadLevel(game.level);
+    player = createPlayer();
+    enemies = [];
+    bullets = [];
+    particles = [];
+    enemySpawnQueue = 5 + game.level * 2;
+    enemySpawnTimer = 60;
+}
+
+function gameOver(won) {
+    game.state = 'over';
+    const title = document.getElementById('gameOverTitle');
+    const score = document.getElementById('gameOverScore');
+    title.textContent = won ? '恭喜通关！' : '游戏结束';
+    title.style.color = won ? '#4CAF50' : '#e94560';
+    score.textContent = '最终得分: ' + game.score;
+    document.getElementById('gameOverModal').classList.remove('hidden');
+}
+
+function resetGame() {
+    game.score = 0;
+    game.lives = 3;
+    game.level = 1;
+    game.state = 'playing';
+    game.paused = false;
+    document.getElementById('gameOverModal').classList.add('hidden');
+    document.getElementById('startModal').classList.add('hidden');
+    startLevel();
+}
+
+function drawTank(tank) {
+    if (!tank.alive) return;
+    const cx = tank.x + tank.w / 2;
+    const cy = tank.y + tank.h / 2;
+
+    if (tank.invincible > 0 && Math.floor(game.frame / 4) % 2 === 0) return;
+
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(dirToAngle(tank.dir));
+
+    ctx.fillStyle = tank.color;
+    ctx.fillRect(-tank.w / 2, -tank.h / 2, tank.w, tank.h);
+
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(-tank.w / 2 + 2, -tank.h / 2 + 2, tank.w - 4, tank.h - 4);
+
+    ctx.fillStyle = '#333';
+    ctx.fillRect(-3, -tank.h / 2 - 6, 6, 10);
+
+    ctx.fillStyle = '#666';
+    ctx.fillRect(-tank.w / 4, -tank.h / 4, tank.w / 2, tank.h / 2);
+
+    if (tank.maxHp > 1) {
+        const hpBarW = tank.w * 0.8;
+        const hpRatio = tank.hp / tank.maxHp;
+        ctx.fillStyle = '#333';
+        ctx.fillRect(-hpBarW / 2, -tank.h / 2 - 12, hpBarW, 4);
+        ctx.fillStyle = hpRatio > 0.5 ? '#4CAF50' : '#ff5722';
+        ctx.fillRect(-hpBarW / 2, -tank.h / 2 - 12, hpBarW * hpRatio, 4);
+    }
+
+    ctx.restore();
+}
+
+function drawBase() {
+    if (!base || !base.alive) return;
+    const cx = base.x + base.w / 2;
+    const cy = base.y + base.h / 2;
+
+    ctx.save();
+    ctx.translate(cx, cy);
+
+    ctx.fillStyle = '#FFD700';
+    ctx.beginPath();
+    ctx.moveTo(0, -base.h / 2);
+    ctx.lineTo(base.w / 2, 0);
+    ctx.lineTo(0, base.h / 2);
+    ctx.lineTo(-base.w / 2, 0);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.strokeStyle = '#FFA500';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    ctx.fillStyle = '#FF6347';
+    ctx.font = 'bold 12px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('基地', 0, 1);
+
+    ctx.restore();
+}
+
+function drawWalls() {
+    for (const wall of walls) {
+        if (wall.type === 1) {
+            ctx.fillStyle = '#8B4513';
+            ctx.fillRect(wall.x, wall.y, wall.w, wall.h);
+            ctx.fillStyle = '#A0522D';
+            ctx.fillRect(wall.x + 2, wall.y + 2, wall.w - 4, wall.h - 4);
+            ctx.fillStyle = '#8B4513';
+            ctx.fillRect(wall.x + 6, wall.y + 6, wall.w - 12, wall.h - 12);
+        } else {
+            ctx.fillStyle = '#666';
+            ctx.fillRect(wall.x, wall.y, wall.w, wall.h);
+            ctx.fillStyle = '#888';
+            ctx.fillRect(wall.x + 2, wall.y + 2, wall.w - 4, wall.h - 4);
+            ctx.fillStyle = '#555';
+            ctx.fillRect(wall.x + 6, wall.y + 6, wall.w - 12, wall.h - 12);
+        }
+    }
+}
+
+function drawBullets() {
+    for (const b of bullets) {
+        ctx.fillStyle = b.isPlayer ? '#FFFF00' : '#FF6B6B';
+        ctx.beginPath();
+        ctx.arc(b.x + b.w / 2, b.y + b.h / 2, b.w / 2, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = b.isPlayer ? 'rgba(255,255,0,0.3)' : 'rgba(255,107,107,0.3)';
+        ctx.beginPath();
+        ctx.arc(b.x + b.w / 2, b.y + b.h / 2, b.w, 0, Math.PI * 2);
+        ctx.fill();
+    }
+}
+
+function drawParticles() {
+    for (const p of particles) {
+        const alpha = p.life / p.maxLife;
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size * alpha, 0, Math.PI * 2);
+        ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+}
+
+function drawGrid() {
+    ctx.strokeStyle = 'rgba(233, 69, 96, 0.05)';
+    ctx.lineWidth = 1;
+    for (let x = 0; x <= canvas.width; x += TILE_SIZE) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, canvas.height);
+        ctx.stroke();
+    }
+    for (let y = 0; y <= canvas.height; y += TILE_SIZE) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(canvas.width, y);
+        ctx.stroke();
+    }
+}
+
+function drawPause() {
+    if (!game.paused) return;
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 36px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('暂停', canvas.width / 2, canvas.height / 2);
+}
+
+function draw() {
+    ctx.fillStyle = '#1a1a2e';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    drawGrid();
+    drawWalls();
+    if (base) drawBase();
+    if (player) drawTank(player);
+    for (const enemy of enemies) drawTank(enemy);
+    drawBullets();
+    drawParticles();
+    drawPause();
+}
+
+function update() {
+    if (game.state !== 'playing' || game.paused) return;
+
+    game.frame++;
+    spawnEnemy();
+    updatePlayer();
+    updateEnemies();
+    updateBullets();
+    checkEnemyCollision();
+    updateParticles();
+    updateUI();
+    checkLevelComplete();
+}
+
+function gameLoop() {
+    update();
+    draw();
+    requestAnimationFrame(gameLoop);
+}
+
+const keys = {};
+document.addEventListener('keydown', (e) => {
+    keys[e.code] = true;
+
+    if (e.code === 'KeyP') {
+        if (game.state === 'playing') {
+            game.paused = !game.paused;
+        }
+    }
+
+    if (e.code === 'KeyR') {
+        if (game.state === 'over' || game.state === 'playing') {
+            resetGame();
+        }
+    }
+});
+
+document.addEventListener('keyup', (e) => {
+    keys[e.code] = false;
+});
+
+document.getElementById('startBtn').addEventListener('click', resetGame);
+document.getElementById('restartBtn').addEventListener('click', resetGame);
+
+gameLoop();
