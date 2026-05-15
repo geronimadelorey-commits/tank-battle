@@ -387,7 +387,7 @@ function loadLevel(lvl) {
 
 function createPlayer() {
     return {
-        x: 2 * TILE_SIZE,
+        x: 3 * TILE_SIZE,
         y: 2 * TILE_SIZE,
         w: TILE_SIZE * 1.6,
         h: TILE_SIZE * 1.6,
@@ -650,7 +650,7 @@ function playerHit() {
         player.alive = false;
         gameOver(false);
     } else {
-        player.x = 2 * TILE_SIZE;
+        player.x = 3 * TILE_SIZE;
         player.y = 2 * TILE_SIZE;
         player.dir = DIR.DOWN;
         player.invincible = 180;
